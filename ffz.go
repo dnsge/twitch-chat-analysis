@@ -8,30 +8,30 @@ import (
 )
 
 const (
-	FfzApiBase = "https://api.frankerfacez.com/v1"
+	FfzAPIBase = "https://api.frankerfacez.com/v1"
 )
 
 var httpClient = &http.Client{Timeout: 5 * time.Second}
 
-type SetList map[string]FfzSet
+type setList map[string]ffzSet
 
-type FfzGlobal struct {
+type ffzGlobal struct {
 	DefaultSets []int   `json:"default_sets"`
-	Sets        SetList `json:"sets"`
+	Sets        setList `json:"sets"`
 }
 
-type FfzRoom struct {
-	RoomInfo FfzRoomInfo `json:"room"`
-	Sets     SetList     `json:"sets"`
+type ffzRoom struct {
+	RoomInfo ffzRoomInfo `json:"room"`
+	Sets     setList     `json:"sets"`
 }
 
-type FfzRoomInfo struct {
+type ffzRoomInfo struct {
 	ID          int    `json:"_id"`
 	DisplayName string `json:"display_name"`
 	Set         int    `json:"set"`
 }
 
-type FfzSet struct {
+type ffzSet struct {
 	Emoticons []FfzEmote `json:"emoticons"`
 }
 
@@ -44,20 +44,20 @@ func (e *FfzEmote) Identifier() string {
 	return "ffz:" + e.Name
 }
 
-func getFfzRoomEmotes(roomName string) ([]FfzEmote, error) {
-	globalEmotes := &FfzGlobal{}
-	err := getJson(FfzApiBase+"/set/global", globalEmotes)
+func GetFfzRoomEmotes(roomName string) ([]FfzEmote, error) {
+	globalEmotes := &ffzGlobal{}
+	err := getJSON(FfzAPIBase+"/set/global", globalEmotes)
 	if err != nil {
 		return nil, err
 	}
 
-	roomEmotes := &FfzRoom{}
-	err = getJson(FfzApiBase+"/room/"+strings.ToLower(roomName), roomEmotes)
+	roomEmotes := &ffzRoom{}
+	err = getJSON(FfzAPIBase+"/room/"+strings.ToLower(roomName), roomEmotes)
 	if err != nil {
 		return nil, err
 	}
 
-	globalSets := make([]FfzSet, len(globalEmotes.DefaultSets))
+	globalSets := make([]ffzSet, len(globalEmotes.DefaultSets))
 	totalCount := 0
 	for i, v := range globalEmotes.DefaultSets {
 		globalSets[i] = globalEmotes.Sets[strconv.Itoa(v)]

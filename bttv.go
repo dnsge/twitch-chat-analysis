@@ -5,10 +5,10 @@ import (
 )
 
 const (
-	BttvApiBase = "https://api.betterttv.net/2"
+	BttvAPIBase = "https://api.betterttv.net/2"
 )
 
-type BttvEmoteResp struct {
+type bttvEmoteResp struct {
 	Emotes []BttvEmote `json:"emotes"`
 }
 
@@ -21,15 +21,15 @@ func (e *BttvEmote) Identifier() string {
 	return "bttv:" + e.Name
 }
 
-func getBttvRoomEmotes(roomName string) ([]BttvEmote, error) {
-	globalEmotes := &BttvEmoteResp{}
-	err := getJson(BttvApiBase+"/emotes", globalEmotes)
+func GetBttvRoomEmotes(roomName string) ([]BttvEmote, error) {
+	globalEmotes := &bttvEmoteResp{}
+	err := getJSON(BttvAPIBase+"/emotes", globalEmotes)
 	if err != nil {
 		return nil, err
 	}
 
-	roomEmotes := &BttvEmoteResp{}
-	err = getJson(BttvApiBase+"/channels/"+strings.ToLower(roomName), roomEmotes)
+	roomEmotes := &bttvEmoteResp{}
+	err = getJSON(BttvAPIBase+"/channels/"+strings.ToLower(roomName), roomEmotes)
 	if err != nil {
 		return nil, err
 	}

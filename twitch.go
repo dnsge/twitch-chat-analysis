@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func getJson(url string, target interface{}) error {
+func getJSON(url string, target interface{}) error {
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return err
@@ -25,16 +25,15 @@ func getJson(url string, target interface{}) error {
 	if r.StatusCode < 200 || r.StatusCode >= 300 {
 		if r.StatusCode == 404 {
 			return errors.New("not found")
-		} else {
-			buf := new(bytes.Buffer)
-			_, err := buf.ReadFrom(r.Body)
-			if err != nil {
-				panic(err)
-			}
-			text := buf.String()
-
-			return errors.New("Request failed: " + text)
 		}
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(r.Body)
+		if err != nil {
+			panic(err)
+		}
+		text := buf.String()
+
+		return errors.New("Request failed: " + text)
 	}
 
 	return json.NewDecoder(r.Body).Decode(target)
@@ -50,11 +49,11 @@ type CustomEmotes struct {
 }
 
 func LoadCustomEmotes(roomName string) (*CustomEmotes, error) {
-	ffz, err := getFfzRoomEmotes(roomName)
+	ffz, err := GetFfzRoomEmotes(roomName)
 	if err != nil {
 		return nil, err
 	}
-	bttv, err := getBttvRoomEmotes(roomName)
+	bttv, err := GetBttvRoomEmotes(roomName)
 	if err != nil {
 		return nil, err
 	}
@@ -110,26 +109,25 @@ func (m *ChatMessage) ExtractEmoteIdentifiers(ce *CustomEmotes, unique bool) []s
 	return emotes
 }
 
-func (m *ChatMessage) isSubscribed() bool {
+func (m *ChatMessage) IsSubscribed() bool {
 	_, hasSub := m.User.Badges["subscriber"]
 	return hasSub
 }
 
-func (m *ChatMessage) hasPrime() bool {
+func (m *ChatMessage) HasPrime() bool {
 	val, hasPremium := m.User.Badges["premium"]
 	return hasPremium && val == 1
 }
 
-func (m *ChatMessage) subCategory() int {
+func (m *ChatMessage) SubCategory() int {
 	val, hasSub := m.User.Badges["subscriber"]
 	if !hasSub {
 		return 0
-	} else {
-		return val
 	}
+	return val
 }
 
-func (m *ChatMessage) subMonths() int {
+func (m *ChatMessage) SubMonths() int {
 	badgeInfo := m.Tags["badge-info"]
 
 	for _, badge := range strings.Split(badgeInfo, ",") {
@@ -169,12 +167,12 @@ func connectToChat(rChan chan *ChatMessage, username string) {
 	}
 }
 
-type EmoteStats = map[string]map[string]int
-type MessageStats = map[string]int
+type emoteStats = map[string]map[string]int
+type messageStats = map[string]int
 
 type TimedStats struct {
-	EmoteStats   EmoteStats    `json:"emote_stats"`
-	MessageStats MessageStats  `json:"message_stats"`
+	EmoteStats   emoteStats    `json:"emote_stats"`
+	MessageStats messageStats  `json:"message_stats"`
 	EmoteCount   int           `json:"emote_count"`
 	MessageCount int           `json:"message_count"`
 	Time         time.Duration `json:"time"`

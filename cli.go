@@ -16,8 +16,8 @@ import (
 func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool, unique bool) TimedStats {
 	messageChan := make(chan *ChatMessage)
 
-	emoteCountStats := make(EmoteStats)
-	messageCountStats := make(MessageStats)
+	emoteCountStats := make(emoteStats)
+	messageCountStats := make(messageStats)
 
 	go connectToChat(messageChan, stream.StreamerName)
 
@@ -26,8 +26,10 @@ func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool, u
 	for start := time.Now(); time.Since(start) < t; {
 		msg := <-messageChan
 		ids := msg.ExtractEmoteIdentifiers(stream.CustomEmotes, unique)
+		binName := strconv.Itoa(msg.SubMonths())
 
 		messageCount++
+		messageCountStats[binName]++
 
 		// No Emotes?
 		if len(ids) == 0 {
@@ -39,16 +41,13 @@ func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool, u
 		}
 
 		emoteCount += len(ids)
-
-		binName := strconv.Itoa(msg.subMonths())
-		messageCountStats[binName] += 1
 		for _, emote := range ids {
 			bin := emoteCountStats[binName]
 			if bin == nil {
 				bin = make(map[string]int)
 				emoteCountStats[binName] = bin
 			}
-			bin[emote] += 1
+			bin[emote]++
 		}
 	}
 
@@ -126,7 +125,7 @@ func interactiveEmoteStats(stream StreamInfo, stats TimedStats) {
 	}
 }
 
-func saveStatistics(stats TimedStats, filename string) {
+func SaveStatistics(stats TimedStats, filename string) {
 	data, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
 		panic(err)
@@ -138,7 +137,7 @@ func saveStatistics(stats TimedStats, filename string) {
 	}
 }
 
-func loadStatistics(filename string) (TimedStats, error) {
+func LoadStatistics(filename string) (TimedStats, error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return TimedStats{}, err
@@ -213,7 +212,7 @@ func Execute() {
 
 		fmt.Println("Collecting Data...")
 		stats := collectStatsForTime(*info, time.Second*time.Duration(exec.Seconds), exec.Print, exec.Unique)
-		saveStatistics(stats, exec.Output)
+		SaveStatistics(stats, exec.Output)
 
 	case "analyze":
 		fail := false
@@ -238,7 +237,7 @@ func Execute() {
 		}
 
 		fmt.Println("Loading File Data...")
-		stats, err := loadStatistics(exec.Input)
+		stats, err := LoadStatistics(exec.Input)
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, "Failed to read input file: "+err.Error())
 			os.Exit(2)
