@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"github.com/gempir/go-twitch-irc"
@@ -21,6 +22,21 @@ func getJson(url string, target interface{}) error {
 		}
 	}()
 
+	if r.StatusCode < 200 || r.StatusCode >= 300 {
+		if r.StatusCode == 404 {
+			return errors.New("not found")
+		} else {
+			buf := new(bytes.Buffer)
+			_, err := buf.ReadFrom(r.Body)
+			if err != nil {
+				panic(err)
+			}
+			text := buf.String()
+
+			return errors.New("Request failed: " + text)
+		}
+	}
+
 	return json.NewDecoder(r.Body).Decode(target)
 }
 
@@ -33,11 +49,20 @@ type CustomEmotes struct {
 	BttvEmotes []BttvEmote `json:"bttv"`
 }
 
-func LoadCustomEmotes(roomName string) *CustomEmotes {
-	return &CustomEmotes{
-		FfzEmotes:  getFfzRoomEmotes(roomName),
-		BttvEmotes: getBttvRoomEmotes(roomName),
+func LoadCustomEmotes(roomName string) (*CustomEmotes, error) {
+	ffz, err := getFfzRoomEmotes(roomName)
+	if err != nil {
+		return nil, err
 	}
+	bttv, err := getBttvRoomEmotes(roomName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CustomEmotes{
+		FfzEmotes:  ffz,
+		BttvEmotes: bttv,
+	}, nil
 }
 
 func (ce *CustomEmotes) IsEmote(word string) (bool, string) {
@@ -56,12 +81,23 @@ func (ce *CustomEmotes) IsEmote(word string) (bool, string) {
 	return false, ""
 }
 
-func (m *ChatMessage) ExtractEmoteIdentifiers(ce *CustomEmotes) []string {
+func contains(arr []string, item string) bool {
+	for _, a := range arr {
+		if a == item {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *ChatMessage) ExtractEmoteIdentifiers(ce *CustomEmotes, unique bool) []string {
 	var emotes []string
 
 	for _, word := range strings.Split(m.Message, " ") {
 		if isEmote, id := ce.IsEmote(word); isEmote {
-			emotes = append(emotes, id)
+			if !(unique && contains(emotes, id)) {
+				emotes = append(emotes, id)
+			}
 		}
 	}
 
@@ -149,12 +185,16 @@ type StreamInfo struct {
 	CustomEmotes *CustomEmotes `json:"emotes"`
 }
 
-func NewStreamInfo(streamerName string) StreamInfo {
-	emotes := LoadCustomEmotes(streamerName)
-	return StreamInfo{
+func NewStreamInfo(streamerName string) (*StreamInfo, error) {
+	emotes, err := LoadCustomEmotes(streamerName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &StreamInfo{
 		StreamerName: streamerName,
 		CustomEmotes: emotes,
-	}
+	}, nil
 }
 
 func (ce *CustomEmotes) FindIdentifierByName(name string, defaultTtv bool) (string, error) {
@@ -175,4 +215,3 @@ func (ce *CustomEmotes) FindIdentifierByName(name string, defaultTtv bool) (stri
 	}
 	return "", errors.New("unable to find specified emote")
 }
-

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"time"
 )
 
-func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool) TimedStats {
+func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool, unique bool) TimedStats {
 	messageChan := make(chan *ChatMessage)
 
 	emoteCountStats := make(EmoteStats)
@@ -24,7 +25,7 @@ func collectStatsForTime(stream StreamInfo, t time.Duration, printEmotes bool) T
 	emoteCount := 0
 	for start := time.Now(); time.Since(start) < t; {
 		msg := <-messageChan
-		ids := msg.ExtractEmoteIdentifiers(stream.CustomEmotes)
+		ids := msg.ExtractEmoteIdentifiers(stream.CustomEmotes, unique)
 
 		messageCount++
 
@@ -156,124 +157,125 @@ type ExecMode struct {
 	Cmd     string
 	Input   string
 	Output  string
-	Chat    string
+	Channel string
 	Seconds int64
 	Print   bool
+	Unique  bool
 }
 
 func Execute() {
-	args := os.Args[1:]
-	exec := &ExecMode{}
 
-	for i, argText := range args {
-		arg := strings.SplitN(argText, "=", 2)
-		if arg[0] == "collect" && i == 0 {
-			exec.Cmd = "collect"
-			continue
-		}
+	channel := flag.String("c", "", "Twitch.tv channel name")
+	input := flag.String("i", "", "Input file")
+	output := flag.String("o", "", "Output file")
+	printEmotes := flag.Bool("print", false, "Whether to print chat emotes")
+	unique := flag.Bool("unique", false, "Only count emote once per message")
+	t := flag.Int64("t", 0, "Time to run")
 
-		if arg[0] == "analyze" && i == 0 {
-			exec.Cmd = "analyze"
-			continue
-		}
+	flag.Parse()
 
-		if arg[0] == "interactive" && i == 0 {
-			exec.Cmd = "interactive"
-			continue
-		}
-
-		if arg[0] == "c" || arg[0] == "chat" {
-			exec.Chat = arg[1]
-			continue
-		}
-
-		if arg[0] == "p" || arg[0] == "print" {
-			exec.Print = true
-			continue
-		}
-
-		if arg[0] == "o" || arg[0] == "out" {
-			exec.Output = arg[1]
-			continue
-		}
-
-		if arg[0] == "i" || arg[0] == "input" {
-			exec.Input = arg[1]
-			continue
-		}
-
-		if arg[0] == "t" || arg[0] == "time" {
-			num, err := strconv.ParseInt(arg[1], 10, 64)
-			if err != nil {
-				fmt.Println("Invalid time: Not an integer")
-				os.Exit(1)
-			}
-			exec.Seconds = num
-			continue
-		}
+	exec := &ExecMode{
+		Cmd:     flag.Arg(0),
+		Input:   *input,
+		Output:  *output,
+		Channel: *channel,
+		Seconds: *t,
+		Print:   *printEmotes,
+		Unique:  *unique,
 	}
 
 	switch exec.Cmd {
 	case "collect":
-		if exec.Chat == "" {
-			_, _ = fmt.Fprintln(os.Stderr, "Chat argument not specified (chat/c)")
-			os.Exit(1)
+		fail := false
+		if exec.Channel == "" {
+			_, _ = fmt.Fprintln(os.Stderr, "Channel (c) argument is required for collection")
+			fail = true
 		}
 		if exec.Output == "" {
-			_, _ = fmt.Fprintln(os.Stderr, "Output argument not specified (out/o)")
+			_, _ = fmt.Fprintln(os.Stderr, "Output (o) argument is required for collection")
+			fail = true
+		}
+		if exec.Seconds < 1 {
+			_, _ = fmt.Fprintln(os.Stderr, "Time (t) argument is required for collection & must be greater than 0")
+			fail = true
+		}
+
+		if fail {
 			os.Exit(1)
 		}
-		fmt.Println("Loading Chat Info...")
-		info := NewStreamInfo(exec.Chat)
+
+		fmt.Println("Loading Channel Info...")
+		info, err := NewStreamInfo(exec.Channel)
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "Failed to load channel info: "+err.Error())
+			os.Exit(3)
+		}
 
 		fmt.Println("Collecting Data...")
-		stats := collectStatsForTime(info, time.Second*time.Duration(exec.Seconds), exec.Print)
+		stats := collectStatsForTime(*info, time.Second*time.Duration(exec.Seconds), exec.Print, exec.Unique)
 		saveStatistics(stats, exec.Output)
 
 	case "analyze":
-		if exec.Chat == "" {
-			_, _ = fmt.Fprintln(os.Stderr, "Chat argument not specified (chat/c)")
-			os.Exit(1)
+		fail := false
+		if exec.Channel == "" {
+			_, _ = fmt.Fprintln(os.Stderr, "Channel (c) argument is required for analyze")
+			fail = true
 		}
 		if exec.Input == "" {
-			_, _ = fmt.Fprintln(os.Stderr, "Input argument not specified (input/i)")
+			_, _ = fmt.Fprintln(os.Stderr, "Input (i) argument is required for analyze")
+			fail = true
+		}
+
+		if fail {
 			os.Exit(1)
 		}
 
-		fmt.Println("Loading Chat Info...")
-		info := NewStreamInfo(exec.Chat)
+		fmt.Println("Loading Channel Info...")
+		info, err := NewStreamInfo(exec.Channel)
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "Failed to load channel info: "+err.Error())
+			os.Exit(3)
+		}
+
 		fmt.Println("Loading File Data...")
 		stats, err := loadStatistics(exec.Input)
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, "Failed to read input file: "+err.Error())
-			os.Exit(1)
+			os.Exit(2)
 		}
-		interactiveEmoteStats(info, stats)
+		interactiveEmoteStats(*info, stats)
 	case "interactive":
-
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("\nEnter chat room name: ")
 
-		cn, _ := reader.ReadString('\n')
-		exec.Chat = strings.TrimSuffix(cn, "\n")
-		fmt.Println("\nLoading Chat Info...")
-		info := NewStreamInfo(exec.Chat)
-
-		fmt.Print("\nSeconds to run collection: ")
-		tm, _ := reader.ReadString('\n')
-		tm = strings.TrimSuffix(tm, "\n")
-
-		parsed, err := strconv.ParseInt(tm, 10, 64)
-		if err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, "Invalid time: Not an integer")
-			os.Exit(1)
+		if exec.Channel == "" {
+			fmt.Print("Enter chat room name: ")
+			cn, _ := reader.ReadString('\n')
+			exec.Channel = strings.TrimSuffix(cn, "\n")
 		}
 
-		exec.Seconds = parsed
+		fmt.Println("Loading Channel Info...")
+		info, err := NewStreamInfo(exec.Channel)
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "Failed to load channel info: "+err.Error())
+			os.Exit(3)
+		}
+
+		if exec.Seconds == 0 {
+			fmt.Print("\nSeconds to run collection: ")
+			tm, _ := reader.ReadString('\n')
+			tm = strings.TrimSuffix(tm, "\n")
+			parsed, err := strconv.ParseInt(tm, 10, 64)
+			if err != nil {
+				_, _ = fmt.Fprintln(os.Stderr, "Invalid time: Not an integer")
+				os.Exit(1)
+			}
+			exec.Seconds = parsed
+		}
+
 		fmt.Println("Collecting Data...")
-		stats := collectStatsForTime(info, time.Second*time.Duration(exec.Seconds), exec.Print)
-		interactiveEmoteStats(info, stats)
+		stats := collectStatsForTime(*info, time.Second*time.Duration(exec.Seconds), exec.Print, exec.Unique)
+		interactiveEmoteStats(*info, stats)
 	default:
-		break
+		fmt.Println("Usage: collect, analyze, or interactive")
 	}
 }

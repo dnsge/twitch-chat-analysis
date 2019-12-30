@@ -44,17 +44,17 @@ func (e *FfzEmote) Identifier() string {
 	return "ffz:" + e.Name
 }
 
-func getFfzRoomEmotes(roomName string) []FfzEmote {
+func getFfzRoomEmotes(roomName string) ([]FfzEmote, error) {
 	globalEmotes := &FfzGlobal{}
 	err := getJson(FfzApiBase+"/set/global", globalEmotes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	roomEmotes := &FfzRoom{}
 	err = getJson(FfzApiBase+"/room/"+strings.ToLower(roomName), roomEmotes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	globalSets := make([]FfzSet, len(globalEmotes.DefaultSets))
@@ -82,5 +82,5 @@ func getFfzRoomEmotes(roomName string) []FfzEmote {
 		l++
 	}
 
-	return allEmotes
+	return allEmotes, nil
 }
